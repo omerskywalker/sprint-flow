@@ -83,16 +83,29 @@ Cross-sprint insights and velocity tracking.
 
 ---
 
-## Phase 4: Search, Filter & Productivity 🔲
+## Phase 4: Search, Filter & Productivity ✅
 
-Making it faster to find and act on tickets.
+Making it faster to find and act on tickets. Also includes bug fixes from phase 3.
 
-- 🔲 Global ticket search (across all sprints, by name or ticket #)
-- 🔲 Filter tickets by tag, status, and story points in sprint/list views
-- 🔲 Keyboard shortcuts (e.g. `n` = new ticket, `k`/`j` = navigate, `d` = daily view)
-- 🔲 Bulk status update (select multiple tickets → move to status)
+**Bug fixes**
+- ✅ Dark mode toggle now works (Tailwind v4 class-based `@variant dark` configured)
+- ✅ Sprint dropdown click-outside closes menu (`useClickOutside` hook)
+
+**Features**
+- ✅ Global ticket search — `⌘K` opens search modal, searches by name / ticket # / tag across all sprints, keyboard navigable (↑↓ / ↵)
+- ✅ Search button in top nav with `⌘K` hint
+- ✅ Filter tickets by status and tag in Sprint view (Kanban and List tabs)
+- ✅ Active filter chips with Clear button; filtered Kanban board respected
+- ✅ Keyboard shortcuts: `D/W/S/A` = nav views, `N` = new ticket (Sprint view), `⌘K` = search, `?` = help
+- ✅ Keyboard shortcuts help modal (`?` key or keyboard icon in nav)
+- ✅ Keyboard icon button in top nav header
+- ✅ Bulk status update in List view: select any tickets via checkboxes → move all to a status in one click
+- ✅ Select-all checkbox in list header
+- ✅ Bulk action bar with status buttons appears when any tickets are selected
+
+**Deferred to Phase 5 (requires DB migration)**
 - 🔲 Sprint templates (save a ticket set as a reusable template)
-- 🔲 Drag-to-reorder tickets in list view (manual ordering via `position` column)
+- 🔲 Drag-to-reorder tickets in list view (needs `position` column)
 
 ---
 

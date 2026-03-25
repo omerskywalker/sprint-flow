@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Zap, LogOut, ChevronDown } from 'lucide-react'
+import { Zap, LogOut, ChevronDown, Search, Keyboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
@@ -10,7 +10,11 @@ import { useAppStore } from '@/lib/store'
 import { useQuery } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import type { Sprint } from '@/types'
-import { useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
+import { useClickOutside } from '@/lib/use-click-outside'
+import { useKeyboardShortcuts } from '@/lib/use-keyboard-shortcuts'
+import { SearchModal } from '@/components/shared/search-modal'
+import { ShortcutsModal } from '@/components/shared/shortcuts-modal'
 
 interface DashboardShellProps {
   user: User
@@ -30,6 +34,14 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const supabase = createClient()
   const { activeSprintId, setActiveSprintId } = useAppStore()
   const [sprintMenuOpen, setSprintMenuOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const sprintMenuRef = useRef<HTMLDivElement>(null)
+  useClickOutside(sprintMenuRef, () => setSprintMenuOpen(false), sprintMenuOpen)
+
+  const openSearch = useCallback(() => setSearchOpen(true), [])
+  const openHelp = useCallback(() => setShortcutsOpen(true), [])
+  useKeyboardShortcuts({ onSearch: openSearch, onHelp: openHelp })
 
   const { data: sprints } = useQuery<Sprint[]>({
     queryKey: ['sprints'],
@@ -78,7 +90,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </Link>
 
           {activeSprint && (
-            <div className="relative">
+            <div className="relative" ref={sprintMenuRef}>
               <button
                 onClick={() => setSprintMenuOpen(v => !v)}
                 className={cn(
@@ -170,8 +182,29 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </div>
         </nav>
 
-        {/* Right: Theme toggle + avatar + sign out */}
+        {/* Right: Search + shortcuts + theme + avatar + sign out */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className={cn(
+              'hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+              'dark:bg-white/5 bg-black/4',
+              'dark:text-slate-500 text-stone-400',
+              'dark:hover:bg-white/8 hover:bg-black/6',
+              'border dark:border-white/8 border-black/8'
+            )}
+            title="Search (⌘K)"
+          >
+            <Search size={13} />
+            <span className="text-xs">⌘K</span>
+          </button>
+          <button
+            onClick={() => setShortcutsOpen(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg dark:text-slate-500 text-stone-400 dark:hover:bg-white/6 hover:bg-black/5 transition-colors"
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard size={15} />
+          </button>
           <ThemeToggle />
 
           <div className="flex items-center gap-2">
@@ -209,6 +242,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       <main className="flex-1 overflow-auto">
         {children}
       </main>
+
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   )
 }

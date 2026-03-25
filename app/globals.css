@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* ── Class-based dark mode (overrides Tailwind v4 default media-query behavior) */
+@variant dark (&:where(.dark, .dark *));
+
 /* ── Custom theme tokens ─────────────────────────────────────────────── */
 @theme inline {
   --color-accent:           #22d3ee;

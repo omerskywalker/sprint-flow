@@ -22,12 +22,14 @@ function StatCard({
   label,
   value,
   sub,
+  tooltip,
   color = 'cyan',
 }: {
   icon: React.ElementType
   label: string
   value: string | number
   sub?: string
+  tooltip: string
   color?: 'cyan' | 'emerald' | 'amber' | 'slate'
 }) {
   const colorMap = {
@@ -38,10 +40,24 @@ function StatCard({
   }
   return (
     <div className={cn(
-      'rounded-2xl p-5 border',
+      'group relative rounded-2xl p-5 border transition-shadow',
       'dark:bg-[#1a1a1f] bg-white',
-      'dark:border-white/6 border-black/8'
+      'dark:border-white/6 border-black/8',
+      'hover:shadow-lg dark:hover:shadow-black/40'
     )}>
+      {/* Tooltip */}
+      <div className={cn(
+        'pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full z-10',
+        'w-52 rounded-xl px-3 py-2 text-xs leading-snug',
+        'dark:bg-[#0e0e10] bg-stone-900 text-slate-200',
+        'border dark:border-white/10 border-white/20',
+        'shadow-[0_4px_20px_rgba(0,0,0,0.5)]',
+        'opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150',
+      )}>
+        {tooltip}
+        <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 dark:border-t-[#0e0e10] border-t-stone-900" />
+      </div>
+
       <div className="flex items-center gap-2 mb-3">
         <Icon size={15} className="dark:text-slate-500 text-stone-400" />
         <span className="text-xs dark:text-slate-500 text-stone-400 uppercase tracking-wide font-medium">{label}</span>
@@ -152,6 +168,7 @@ export default function AnalyticsPage() {
           label="Avg Velocity"
           value={`${avgVelocity}pt`}
           sub="story points / sprint"
+          tooltip="Average story points completed per sprint. Higher is better — aim to keep this consistent across sprints."
           color="cyan"
         />
         <StatCard
@@ -159,6 +176,7 @@ export default function AnalyticsPage() {
           label="Avg Completion"
           value={`${avgRate}%`}
           sub="points completed"
+          tooltip="Average percentage of planned story points that were marked done by sprint end. ≥80% is healthy; below 50% suggests overcommitment."
           color={avgRate >= 80 ? 'emerald' : avgRate >= 50 ? 'amber' : 'slate'}
         />
         <StatCard
@@ -166,6 +184,7 @@ export default function AnalyticsPage() {
           label="Tickets Done"
           value={totalDone}
           sub={`across ${sprints.length} sprint${sprints.length !== 1 ? 's' : ''}`}
+          tooltip="Total number of individual tickets marked as Done across all your sprints."
           color="emerald"
         />
         <StatCard
@@ -173,6 +192,7 @@ export default function AnalyticsPage() {
           label="Best Sprint"
           value={bestSprint ? `${bestSprint.donePoints}pt` : '—'}
           sub={bestSprint?.sprint.name ?? ''}
+          tooltip="The sprint where you completed the most story points. Use this as your benchmark for peak velocity."
           color="cyan"
         />
       </div>

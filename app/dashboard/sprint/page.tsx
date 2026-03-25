@@ -13,8 +13,8 @@ import { TicketForm } from '@/components/tickets/ticket-form'
 import { DeleteConfirmModal } from '@/components/shared/delete-confirm-modal'
 import { TagBadge } from '@/components/shared/tag-badge'
 import Link from 'next/link'
-import { Plus, BarChart2, Columns, List, Pencil, Trash2, ArrowUpDown, Settings, X } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, BarChart2, Columns, List, Pencil, Trash2, ArrowUpDown, Settings, X, Filter } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from '@/components/shared/toast'
 import { SprintSkeleton } from '@/components/shared/skeleton'
@@ -37,6 +37,23 @@ export default function SprintPage() {
   const [showSprintSettings, setShowSprintSettings] = useState(false)
   const [showDeleteSprint, setShowDeleteSprint] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [filterStatus, setFilterStatus] = useState<TicketStatus | null>(null)
+  const [filterTag, setFilterTag] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // 'n' shortcut → new ticket (only when not typing)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      if (e.key === 'n' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowTicketForm(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const queryKey = ['sprint-detail', activeSprintId ?? ''] as string[]
 
@@ -150,6 +167,22 @@ export default function SprintPage() {
     onError: () => toast('Failed to delete sprint'),
   })
 
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (status: TicketStatus) => {
+      const ids = Array.from(selectedIds)
+      const { error } = await supabase
+        .from('tickets')
+        .update({ status })
+        .in('id', ids)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey })
+      setSelectedIds(new Set())
+    },
+    onError: () => toast('Failed to update tickets'),
+  })
+
   if (sprintLoading) return <SprintSkeleton />
 
   if (!activeSprintId || !sprint) {
@@ -169,7 +202,16 @@ export default function SprintPage() {
   const donePoints = rawTickets.filter(t => t.status === 'done').reduce((acc, t) => acc + t.story_points, 0)
   const overallPct = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0
 
-  const sortedTickets = [...tickets].sort((a, b) => {
+  // Collect all tags across sprint tickets for filter chips
+  const allTags = Array.from(new Set(tickets.flatMap(t => t.tags))).sort()
+
+  const filteredTickets = tickets.filter(t => {
+    if (filterStatus && t.status !== filterStatus) return false
+    if (filterTag && !t.tags.includes(filterTag)) return false
+    return true
+  })
+
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
     if (sortField === 'story_points') return b.story_points - a.story_points
     if (sortField === 'status') {
       const order: Record<TicketStatus, number> = { todo: 0, in_progress: 1, review: 2, done: 3 }
@@ -177,6 +219,8 @@ export default function SprintPage() {
     }
     return a.ticket_number.localeCompare(b.ticket_number)
   })
+
+  const hasFilters = filterStatus !== null || filterTag !== null
 
   return (
     <div className="px-4 py-6 space-y-6 max-w-6xl mx-auto">
@@ -244,6 +288,54 @@ export default function SprintPage() {
         })}
       </div>
 
+      {/* Filter chips — shown on kanban and list views */}
+      {(viewMode === 'kanban' || viewMode === 'list') && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter size={13} className="dark:text-slate-600 text-stone-400 shrink-0" />
+
+          {/* Status filters */}
+          {(['todo', 'in_progress', 'review', 'done'] as TicketStatus[]).map(status => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(filterStatus === status ? null : status)}
+              className={cn(
+                'tag-badge border transition-all',
+                filterStatus === status
+                  ? 'dark:bg-cyan-500/20 bg-cyan-100 dark:text-cyan-300 text-cyan-700 dark:border-cyan-500/40 border-cyan-300'
+                  : 'dark:bg-white/4 bg-black/4 dark:text-slate-500 text-stone-400 dark:border-white/8 border-black/8 dark:hover:bg-white/8 hover:bg-black/6'
+              )}
+            >
+              {statusLabel(status)}
+            </button>
+          ))}
+
+          {/* Tag filters */}
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+              className={cn(
+                'tag-badge border transition-all',
+                filterTag === tag
+                  ? 'dark:bg-violet-500/20 bg-violet-100 dark:text-violet-300 text-violet-700 dark:border-violet-500/40 border-violet-300'
+                  : 'dark:bg-white/4 bg-black/4 dark:text-slate-500 text-stone-400 dark:border-white/8 border-black/8 dark:hover:bg-white/8 hover:bg-black/6'
+              )}
+            >
+              {tag}
+            </button>
+          ))}
+
+          {hasFilters && (
+            <button
+              onClick={() => { setFilterStatus(null); setFilterTag(null) }}
+              className="flex items-center gap-1 text-xs dark:text-slate-600 text-stone-400 dark:hover:text-slate-300 hover:text-stone-600 ml-1"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Burndown tab */}
       {viewMode === 'burndown' && (
         <div className="space-y-4">
@@ -263,113 +355,177 @@ export default function SprintPage() {
 
       {/* Kanban tab */}
       {viewMode === 'kanban' && (
-        <KanbanBoard tickets={tickets} queryKey={queryKey} />
+        <KanbanBoard tickets={filteredTickets} queryKey={queryKey} />
       )}
 
       {/* List tab */}
       {viewMode === 'list' && (
-        <div className={cn(
-          'rounded-2xl border overflow-hidden',
-          'dark:bg-[#1a1a1f] bg-white',
-          'dark:border-white/6 border-black/8'
-        )}>
-          {/* Table header */}
-          <div className={cn(
-            'grid grid-cols-[40px_1fr_80px_140px_120px_100px_80px] gap-2 px-4 py-3 text-xs font-medium uppercase tracking-wide',
-            'dark:text-slate-500 text-stone-400',
-            'dark:border-b dark:border-white/6 border-b border-black/8'
-          )}>
-            <span>#</span>
-            <span>Ticket</span>
-            <button
-              onClick={() => setSortField('story_points')}
-              className="flex items-center gap-1 hover:dark:text-slate-300 hover:text-stone-600"
-            >
-              Points <ArrowUpDown size={10} />
-            </button>
-            <span>Tags</span>
-            <button
-              onClick={() => setSortField('status')}
-              className="flex items-center gap-1 hover:dark:text-slate-300 hover:text-stone-600"
-            >
-              Status <ArrowUpDown size={10} />
-            </button>
-            <span>Progress</span>
-            <span>Actions</span>
-          </div>
-
-          {sortedTickets.map((ticket, i) => {
-            const doneTasks = ticket.micro_tasks?.filter(t => t.completed).length ?? 0
-            const totalTasks = ticket.micro_tasks?.length ?? 0
-            const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
-
-            return (
-              <div
-                key={ticket.id}
-                className={cn(
-                  'grid grid-cols-[40px_1fr_80px_140px_120px_100px_80px] gap-2 px-4 py-3 items-center',
-                  'dark:hover:bg-white/3 hover:bg-black/2 transition-colors',
-                  i < sortedTickets.length - 1 && 'dark:border-b dark:border-white/4 border-b border-black/6'
-                )}
-              >
-                <span className="text-xs font-mono dark:text-slate-600 text-stone-400">
-                  {ticket.ticket_number}
-                </span>
-                <Link
-                  href={`/dashboard/tickets/${ticket.id}`}
-                  className="text-sm font-medium dark:text-slate-200 text-stone-800 hover:dark:text-white hover:text-stone-900 truncate"
-                >
-                  {ticket.name}
-                </Link>
-                <span className="text-sm dark:text-slate-400 text-stone-600">
-                  {ticket.story_points}pt
-                  <span className="text-xs dark:text-slate-600 text-stone-400 ml-1">
-                    ({pointsToHours(ticket.story_points)}h)
-                  </span>
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {ticket.tags.slice(0, 2).map(tag => (
-                    <TagBadge key={tag} tag={tag} />
-                  ))}
-                </div>
-                <span className={cn('text-xs font-medium', statusColor(ticket.status))}>
-                  {statusLabel(ticket.status)}
-                </span>
-                <div>
-                  {totalTasks > 0 ? (
-                    <div>
-                      <div className="progress-bar mb-1">
-                        <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs dark:text-slate-600 text-stone-400">{pct}%</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs dark:text-slate-700 text-stone-300">—</span>
+        <div>
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className={cn(
+              'flex items-center gap-3 px-4 py-2.5 rounded-xl mb-3 border',
+              'dark:bg-cyan-500/10 bg-cyan-50',
+              'dark:border-cyan-500/20 border-cyan-200'
+            )}>
+              <span className="text-sm font-medium dark:text-cyan-300 text-cyan-700">
+                {selectedIds.size} selected
+              </span>
+              <span className="dark:text-cyan-800 text-cyan-300">·</span>
+              <span className="text-xs dark:text-slate-400 text-stone-500 mr-1">Move to:</span>
+              {(['todo', 'in_progress', 'review', 'done'] as TicketStatus[]).map(s => (
+                <button
+                  key={s}
+                  onClick={() => bulkStatusMutation.mutate(s)}
+                  disabled={bulkStatusMutation.isPending}
+                  className={cn(
+                    'tag-badge border transition-all disabled:opacity-50',
+                    'dark:bg-white/8 bg-black/5 dark:text-slate-300 text-stone-700',
+                    'dark:border-white/10 border-black/10',
+                    'dark:hover:bg-white/14 hover:bg-black/10'
                   )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setEditingTicket(ticket)}
-                    className="rounded p-1.5 dark:text-slate-600 text-stone-400 dark:hover:text-slate-300 hover:text-stone-600 transition-colors"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    onClick={() => setDeleteTicket(ticket)}
-                    className="rounded p-1.5 dark:text-slate-600 text-stone-400 dark:hover:text-red-400 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-
-          {tickets.length === 0 && (
-            <div className="flex items-center justify-center py-16 text-sm dark:text-slate-600 text-stone-400">
-              No tickets yet. Add some above.
+                >
+                  {statusLabel(s)}
+                </button>
+              ))}
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="ml-auto text-xs dark:text-slate-500 text-stone-400 dark:hover:text-slate-300 hover:text-stone-600"
+              >
+                <X size={13} />
+              </button>
             </div>
           )}
+
+          <div className={cn(
+            'rounded-2xl border overflow-hidden',
+            'dark:bg-[#1a1a1f] bg-white',
+            'dark:border-white/6 border-black/8'
+          )}>
+            {/* Table header */}
+            <div className={cn(
+              'grid grid-cols-[28px_40px_1fr_80px_140px_120px_100px_80px] gap-2 px-4 py-3 text-xs font-medium uppercase tracking-wide',
+              'dark:text-slate-500 text-stone-400',
+              'dark:border-b dark:border-white/6 border-b border-black/8'
+            )}>
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={sortedTickets.length > 0 && sortedTickets.every(t => selectedIds.has(t.id))}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setSelectedIds(new Set(sortedTickets.map(t => t.id)))
+                  } else {
+                    setSelectedIds(new Set())
+                  }
+                }}
+              />
+              <span>#</span>
+              <span>Ticket</span>
+              <button
+                onClick={() => setSortField('story_points')}
+                className="flex items-center gap-1 hover:dark:text-slate-300 hover:text-stone-600"
+              >
+                Points <ArrowUpDown size={10} />
+              </button>
+              <span>Tags</span>
+              <button
+                onClick={() => setSortField('status')}
+                className="flex items-center gap-1 hover:dark:text-slate-300 hover:text-stone-600"
+              >
+                Status <ArrowUpDown size={10} />
+              </button>
+              <span>Progress</span>
+              <span>Actions</span>
+            </div>
+
+            {sortedTickets.map((ticket, i) => {
+              const doneTasks = ticket.micro_tasks?.filter(t => t.completed).length ?? 0
+              const totalTasks = ticket.micro_tasks?.length ?? 0
+              const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+              const isSelected = selectedIds.has(ticket.id)
+
+              return (
+                <div
+                  key={ticket.id}
+                  className={cn(
+                    'grid grid-cols-[28px_40px_1fr_80px_140px_120px_100px_80px] gap-2 px-4 py-3 items-center transition-colors',
+                    isSelected
+                      ? 'dark:bg-cyan-500/5 bg-cyan-50'
+                      : 'dark:hover:bg-white/3 hover:bg-black/2',
+                    i < sortedTickets.length - 1 && 'dark:border-b dark:border-white/4 border-b border-black/6'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={isSelected}
+                    onChange={e => {
+                      const next = new Set(selectedIds)
+                      if (e.target.checked) next.add(ticket.id)
+                      else next.delete(ticket.id)
+                      setSelectedIds(next)
+                    }}
+                  />
+                  <span className="text-xs font-mono dark:text-slate-600 text-stone-400">
+                    {ticket.ticket_number}
+                  </span>
+                  <Link
+                    href={`/dashboard/tickets/${ticket.id}`}
+                    className="text-sm font-medium dark:text-slate-200 text-stone-800 hover:dark:text-white hover:text-stone-900 truncate"
+                  >
+                    {ticket.name}
+                  </Link>
+                  <span className="text-sm dark:text-slate-400 text-stone-600">
+                    {ticket.story_points}pt
+                    <span className="text-xs dark:text-slate-600 text-stone-400 ml-1">
+                      ({pointsToHours(ticket.story_points)}h)
+                    </span>
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {ticket.tags.slice(0, 2).map(tag => (
+                      <TagBadge key={tag} tag={tag} />
+                    ))}
+                  </div>
+                  <span className={cn('text-xs font-medium', statusColor(ticket.status))}>
+                    {statusLabel(ticket.status)}
+                  </span>
+                  <div>
+                    {totalTasks > 0 ? (
+                      <div>
+                        <div className="progress-bar mb-1">
+                          <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs dark:text-slate-600 text-stone-400">{pct}%</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs dark:text-slate-700 text-stone-300">—</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setEditingTicket(ticket)}
+                      className="rounded p-1.5 dark:text-slate-600 text-stone-400 dark:hover:text-slate-300 hover:text-stone-600 transition-colors"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTicket(ticket)}
+                      className="rounded p-1.5 dark:text-slate-600 text-stone-400 dark:hover:text-red-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {sortedTickets.length === 0 && (
+              <div className="flex items-center justify-center py-16 text-sm dark:text-slate-600 text-stone-400">
+                {hasFilters ? 'No tickets match the current filters.' : 'No tickets yet. Add some above.'}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
