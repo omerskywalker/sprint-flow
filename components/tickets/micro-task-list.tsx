@@ -5,8 +5,9 @@ import { Check, Plus, Trash2, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MicroTask } from '@/types'
 import { createClient } from '@/lib/supabase/client'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CompletionNoteModal } from '@/components/shared/completion-note-modal'
+import { toast } from '@/components/shared/toast'
 import { DeleteConfirmModal } from '@/components/shared/delete-confirm-modal'
 
 interface MicroTaskListProps {
@@ -19,6 +20,15 @@ interface MicroTaskListProps {
 export function MicroTaskList({ tasks, ticketId, showAC = false, queryKey }: MicroTaskListProps) {
   const supabase = createClient()
   const queryClient = useQueryClient()
+
+  const { data: authUser } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      return user
+    },
+    staleTime: Infinity,
+  })
 
   const [completionModal, setCompletionModal] = useState<{ open: boolean; taskId: string }>({
     open: false,
@@ -45,8 +55,8 @@ export function MicroTaskList({ tasks, ticketId, showAC = false, queryKey }: Mic
         .eq('id', task.id)
       if (error) throw error
 
-      // Audit log
       await supabase.from('audit_log').insert({
+        user_id: authUser?.id,
         entity_type: 'micro_task',
         entity_id: task.id,
         action: newCompleted ? 'completed' : 'unchecked',
@@ -54,6 +64,7 @@ export function MicroTaskList({ tasks, ticketId, showAC = false, queryKey }: Mic
       })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: () => toast('Failed to update task'),
   })
 
   const deleteMutation = useMutation({
@@ -65,12 +76,14 @@ export function MicroTaskList({ tasks, ticketId, showAC = false, queryKey }: Mic
       if (error) throw error
 
       await supabase.from('audit_log').insert({
+        user_id: authUser?.id,
         entity_type: 'micro_task',
         entity_id: taskId,
         action: 'deleted',
       })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: () => toast('Failed to delete task'),
   })
 
   const addTaskMutation = useMutation({
@@ -90,12 +103,14 @@ export function MicroTaskList({ tasks, ticketId, showAC = false, queryKey }: Mic
       if (error) throw error
 
       await supabase.from('audit_log').insert({
+        user_id: authUser?.id,
         entity_type: 'micro_task',
         entity_id: data.id,
         action: 'created',
       })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: () => toast('Failed to add task'),
   })
 
   const handleToggle = (task: MicroTask) => {

@@ -15,6 +15,7 @@ import { KanbanCard } from './kanban-card'
 import type { TicketWithTasks, TicketStatus } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@/components/shared/toast'
 
 const COLUMNS: TicketStatus[] = ['todo', 'in_progress', 'review', 'done']
 
@@ -34,6 +35,9 @@ export function KanbanBoard({ tickets, queryKey }: KanbanBoardProps) {
 
   const statusMutation = useMutation({
     mutationFn: async ({ ticketId, status }: { ticketId: string; status: TicketStatus }) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
       const { error } = await supabase
         .from('tickets')
         .update({ status })
@@ -41,6 +45,7 @@ export function KanbanBoard({ tickets, queryKey }: KanbanBoardProps) {
       if (error) throw error
 
       await supabase.from('audit_log').insert({
+        user_id: user.id,
         entity_type: 'ticket',
         entity_id: ticketId,
         action: status === 'done' ? 'completed' : 'updated',
@@ -48,6 +53,7 @@ export function KanbanBoard({ tickets, queryKey }: KanbanBoardProps) {
       })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: () => toast('Failed to update ticket status'),
   })
 
   const activeTicket = tickets.find(t => t.id === activeId) ?? null
