@@ -18,7 +18,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { TagBadge } from '@/components/shared/tag-badge'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from '@/components/shared/toast'
 import { WeeklySkeleton } from '@/components/shared/skeleton'
@@ -38,20 +38,31 @@ function WeeklyTicketCard({ ticket, isDragging }: { ticket: TicketWithTasks; isD
       {...listeners}
       className={cn(
         'rounded-lg px-2.5 py-2 border transition-all cursor-grab active:cursor-grabbing select-none',
-        'dark:bg-[#1a1a1f] bg-white',
-        'dark:border-white/6 border-black/8',
-        sortDragging || isDragging ? 'opacity-40 scale-95' : 'dark:hover:border-white/14'
+        ticket.status === 'done'
+          ? 'dark:bg-emerald-500/5 bg-emerald-50 dark:border-emerald-500/20 border-emerald-200'
+          : 'dark:bg-[#1a1a1f] bg-white dark:border-white/6 border-black/8',
+        sortDragging || isDragging ? 'opacity-40 scale-95' : ticket.status !== 'done' && 'dark:hover:border-white/14'
       )}
     >
       <div className="flex items-start justify-between gap-1 mb-1">
         <span className="text-xs font-mono dark:text-slate-600 text-stone-400">{ticket.ticket_number}</span>
-        <span className="text-xs dark:text-slate-500 text-stone-400 shrink-0">{ticket.story_points}pt</span>
+        <div className="flex items-center gap-1 shrink-0">
+          {ticket.status === 'done' && (
+            <CheckCircle2 size={11} className="text-emerald-400" />
+          )}
+          <span className="text-xs dark:text-slate-500 text-stone-400">{ticket.story_points}pt</span>
+        </div>
       </div>
       <Link
         href={`/dashboard/tickets/${ticket.id}`}
         onClick={e => e.stopPropagation()}
         draggable={false}
-        className="block text-xs font-medium dark:text-slate-200 text-stone-800 leading-snug mb-1.5 hover:dark:text-white"
+        className={cn(
+          'block text-xs font-medium leading-snug mb-1.5',
+          ticket.status === 'done'
+            ? 'line-through dark:text-slate-500 text-stone-400'
+            : 'dark:text-slate-200 text-stone-800 hover:dark:text-white'
+        )}
       >
         {ticket.name}
       </Link>

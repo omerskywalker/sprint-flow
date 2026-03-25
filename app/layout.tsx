@@ -1,18 +1,18 @@
 import type { Metadata } from 'next'
-import { Space_Grotesk, Inter } from 'next/font/google'
+import { Outfit, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
 import { ThemeScript } from '@/components/theme-script'
 
-const spaceGrotesk = Space_Grotesk({
+const outfit = Outfit({
   subsets: ['latin'],
-  variable: '--font-space-grotesk',
+  variable: '--font-outfit',
   display: 'swap',
 })
 
-const inter = Inter({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-jetbrains',
   display: 'swap',
 })
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${inter.variable} h-full`}
+      className={`${outfit.variable} ${jetbrainsMono.variable} h-full`}
       suppressHydrationWarning
     >
       <head>
