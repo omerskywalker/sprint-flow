@@ -15,6 +15,7 @@ import { TicketForm } from '@/components/tickets/ticket-form'
 import { Plus, Calendar } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 import { useState } from 'react'
+import { PageSkeleton } from '@/components/shared/skeleton'
 
 export default function DashboardPage() {
   const { activeSprintId } = useAppStore()
@@ -24,7 +25,7 @@ export default function DashboardPage() {
 
   const queryKey = ['sprint-detail', activeSprintId ?? ''] as string[]
 
-  const { data: sprint } = useQuery<Sprint | null>({
+  const { data: sprint, isLoading: sprintLoading } = useQuery<Sprint | null>({
     queryKey: ['sprint', activeSprintId],
     queryFn: async () => {
       if (!activeSprintId) return null
@@ -68,6 +69,8 @@ export default function DashboardPage() {
     },
     enabled: !!activeSprintId,
   })
+
+  if (sprintLoading) return <PageSkeleton />
 
   if (!activeSprintId || !sprint) {
     return (

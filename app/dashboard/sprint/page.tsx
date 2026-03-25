@@ -15,6 +15,8 @@ import { TagBadge } from '@/components/shared/tag-badge'
 import Link from 'next/link'
 import { Plus, BarChart2, Columns, List, Pencil, Trash2, ArrowUpDown } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from '@/components/shared/toast'
+import { SprintSkeleton } from '@/components/shared/skeleton'
 
 const VIEW_TABS: { id: ViewMode; label: string; icon: React.ElementType }[] = [
   { id: 'burndown', label: 'Burndown', icon: BarChart2 },
@@ -33,7 +35,7 @@ export default function SprintPage() {
 
   const queryKey = ['sprint-detail', activeSprintId ?? ''] as string[]
 
-  const { data: sprint } = useQuery<Sprint | null>({
+  const { data: sprint, isLoading: sprintLoading } = useQuery<Sprint | null>({
     queryKey: ['sprint', activeSprintId],
     queryFn: async () => {
       if (!activeSprintId) return null
@@ -60,9 +62,11 @@ export default function SprintPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (ticketId: string) => {
+      const { data: { user } } = await supabase.auth.getUser()
       const { error } = await supabase.from('tickets').delete().eq('id', ticketId)
       if (error) throw error
       await supabase.from('audit_log').insert({
+        user_id: user?.id,
         entity_type: 'ticket',
         entity_id: ticketId,
         action: 'deleted',
@@ -72,7 +76,10 @@ export default function SprintPage() {
       queryClient.invalidateQueries({ queryKey })
       setDeleteTicket(null)
     },
+    onError: () => toast('Failed to delete ticket'),
   })
+
+  if (sprintLoading) return <SprintSkeleton />
 
   if (!activeSprintId || !sprint) {
     return (

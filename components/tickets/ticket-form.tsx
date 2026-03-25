@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { Ticket, CreateTicketInput, StoryPoints, TicketStatus } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@/components/shared/toast'
 
 const STORY_POINTS: StoryPoints[] = [1, 2, 3, 5, 8, 13]
 const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
@@ -41,6 +42,9 @@ export function TicketForm({ sprintId, ticket, onClose, queryKey }: TicketFormPr
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
       if (ticket) {
         const { error } = await supabase
           .from('tickets')
@@ -57,14 +61,12 @@ export function TicketForm({ sprintId, ticket, onClose, queryKey }: TicketFormPr
         if (error) throw error
 
         await supabase.from('audit_log').insert({
+          user_id: user.id,
           entity_type: 'ticket',
           entity_id: ticket.id,
           action: 'updated',
         })
       } else {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('Not authenticated')
-
         const { data, error } = await supabase
           .from('tickets')
           .insert({
@@ -94,6 +96,7 @@ export function TicketForm({ sprintId, ticket, onClose, queryKey }: TicketFormPr
       queryClient.invalidateQueries({ queryKey })
       onClose()
     },
+    onError: () => toast('Failed to save ticket'),
   })
 
   const addTag = (tag: string) => {

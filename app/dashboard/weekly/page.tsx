@@ -20,6 +20,8 @@ import { TagBadge } from '@/components/shared/tag-badge'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from '@/components/shared/toast'
+import { WeeklySkeleton } from '@/components/shared/skeleton'
 
 // ── Draggable ticket card ─────────────────────────────────────────────────────
 function WeeklyTicketCard({ ticket, isDragging }: { ticket: TicketWithTasks; isDragging?: boolean }) {
@@ -173,7 +175,7 @@ export default function WeeklyPage() {
 
   const queryKey = ['sprint-detail', activeSprintId]
 
-  const { data: sprint } = useQuery<Sprint | null>({
+  const { data: sprint, isLoading: sprintLoading } = useQuery<Sprint | null>({
     queryKey: ['sprint', activeSprintId],
     queryFn: async () => {
       if (!activeSprintId) return null
@@ -211,6 +213,7 @@ export default function WeeklyPage() {
       if (error) throw error
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: () => toast('Failed to assign ticket to day'),
   })
 
   // Map ISO date -> sprint day number
@@ -291,6 +294,8 @@ export default function WeeklyPage() {
 
   const activeTicket = tickets.find(t => t.id === activeId) ?? null
   const todayIso = toISODate(today)
+
+  if (sprintLoading) return <WeeklySkeleton />
 
   if (!activeSprintId || !sprint) {
     return (

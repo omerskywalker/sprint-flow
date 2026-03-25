@@ -19,6 +19,7 @@ import {
 import { useState } from 'react'
 import Link from 'next/link'
 import { useAppStore } from '@/lib/store'
+import { toast } from '@/components/shared/toast'
 
 type SubTab = 'tasks' | 'contacts' | 'resources' | 'audit'
 
@@ -44,6 +45,15 @@ export default function TicketDetailPage() {
   const [addingResource, setAddingResource] = useState(false)
   const [contactForm, setContactForm] = useState({ name: '', email: '', role: '', notes: '' })
   const [resourceForm, setResourceForm] = useState({ title: '', url: '', notes: '' })
+
+  const { data: authUser } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      return user
+    },
+    staleTime: Infinity,
+  })
 
   const queryKey = ['ticket', id]
 
@@ -103,13 +113,14 @@ export default function TicketDetailPage() {
       const { error } = await supabase.from('tickets').delete().eq('id', id)
       if (error) throw error
       await supabase.from('audit_log').insert({
-        entity_type: 'ticket', entity_id: id, action: 'deleted',
+        user_id: authUser?.id, entity_type: 'ticket', entity_id: id, action: 'deleted',
       })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sprint-detail', activeSprintId] })
       router.back()
     },
+    onError: () => toast('Failed to delete ticket'),
   })
 
   const completeMutation = useMutation({
@@ -120,7 +131,7 @@ export default function TicketDetailPage() {
         .eq('id', id)
       if (error) throw error
       await supabase.from('audit_log').insert({
-        entity_type: 'ticket', entity_id: id, action: 'completed', notes: note,
+        user_id: authUser?.id, entity_type: 'ticket', entity_id: id, action: 'completed', notes: note,
       })
     },
     onSuccess: () => {
@@ -128,6 +139,7 @@ export default function TicketDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['sprint-detail', activeSprintId] })
       setShowCompleteModal(false)
     },
+    onError: () => toast('Failed to mark ticket complete'),
   })
 
   const addContactMutation = useMutation({
@@ -146,6 +158,7 @@ export default function TicketDetailPage() {
       setContactForm({ name: '', email: '', role: '', notes: '' })
       setAddingContact(false)
     },
+    onError: () => toast('Failed to add contact'),
   })
 
   const deleteContactMutation = useMutation({
@@ -154,6 +167,7 @@ export default function TicketDetailPage() {
       if (error) throw error
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contacts', id] }),
+    onError: () => toast('Failed to delete contact'),
   })
 
   const addResourceMutation = useMutation({
@@ -171,6 +185,7 @@ export default function TicketDetailPage() {
       setResourceForm({ title: '', url: '', notes: '' })
       setAddingResource(false)
     },
+    onError: () => toast('Failed to add resource'),
   })
 
   const deleteResourceMutation = useMutation({
@@ -179,6 +194,7 @@ export default function TicketDetailPage() {
       if (error) throw error
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resources', id] }),
+    onError: () => toast('Failed to delete resource'),
   })
 
   if (isLoading) {

@@ -10,6 +10,7 @@ import type { Ticket, DailyFocus, Sprint } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toISODate } from '@/lib/utils'
+import { toast } from '@/components/shared/toast'
 
 interface DailyFocusWidgetProps {
   focusTicket: Ticket | null
@@ -37,6 +38,9 @@ export function DailyFocusWidget({
 
   const overrideMutation = useMutation({
     mutationFn: async (ticketId: string) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
       const today = toISODate(new Date())
       if (todayFocus) {
         const { error } = await supabase
@@ -48,6 +52,7 @@ export function DailyFocusWidget({
         const { error } = await supabase
           .from('daily_focus')
           .insert({
+            user_id: user.id,
             sprint_id: sprint.id,
             date: today,
             ticket_id: ticketId,
@@ -60,6 +65,7 @@ export function DailyFocusWidget({
       queryClient.invalidateQueries({ queryKey: ['daily-focus', sprint.id] })
       setOverrideOpen(false)
     },
+    onError: () => toast('Failed to update focus'),
   })
 
   const resetToAlgo = useMutation({
@@ -74,6 +80,7 @@ export function DailyFocusWidget({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-focus', sprint.id] })
     },
+    onError: () => toast('Failed to reset focus'),
   })
 
   const glowClass = riskLevel === 'high' ? 'glow-amber' : 'glow-cyan animate-pulse-glow'
