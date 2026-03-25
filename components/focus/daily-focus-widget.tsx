@@ -134,11 +134,19 @@ export function DailyFocusWidget({
               </span>
               <span className={cn(
                 'text-xs font-medium px-2 py-0.5 rounded-full',
-                riskLevel === 'high'
+                focusTicket.status === 'in_progress'
+                  ? 'bg-blue-500/15 text-blue-400'
+                  : riskLevel === 'high'
                   ? 'bg-amber-500/15 text-amber-400'
                   : 'bg-cyan-500/15 text-cyan-400'
               )}>
-                {riskLevel === 'high' ? 'High Risk' : riskLevel === 'medium' ? 'Medium Priority' : 'Focus'}
+                {focusTicket.status === 'in_progress'
+                  ? 'In Progress'
+                  : riskLevel === 'high'
+                  ? 'High Risk'
+                  : riskLevel === 'medium'
+                  ? 'Suggested'
+                  : 'Suggested'}
               </span>
               {isManual && (
                 <span className="text-xs bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded-full">

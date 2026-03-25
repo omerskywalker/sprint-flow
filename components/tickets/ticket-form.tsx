@@ -94,6 +94,8 @@ export function TicketForm({ sprintId, ticket, onClose, queryKey }: TicketFormPr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey })
+      // Always refresh the sprint board so kanban/list/burndown stay in sync
+      queryClient.invalidateQueries({ queryKey: ['sprint-detail', sprintId] })
       onClose()
     },
     onError: () => toast('Failed to save ticket'),

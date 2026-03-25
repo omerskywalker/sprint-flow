@@ -13,8 +13,9 @@ import { TicketForm } from '@/components/tickets/ticket-form'
 import { DeleteConfirmModal } from '@/components/shared/delete-confirm-modal'
 import { TagBadge } from '@/components/shared/tag-badge'
 import Link from 'next/link'
-import { Plus, BarChart2, Columns, List, Pencil, Trash2, ArrowUpDown } from 'lucide-react'
+import { Plus, BarChart2, Columns, List, Pencil, Trash2, ArrowUpDown, Settings, X } from 'lucide-react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from '@/components/shared/toast'
 import { SprintSkeleton } from '@/components/shared/skeleton'
 
@@ -25,13 +26,17 @@ const VIEW_TABS: { id: ViewMode; label: string; icon: React.ElementType }[] = [
 ]
 
 export default function SprintPage() {
-  const { activeSprintId, viewMode, setViewMode } = useAppStore()
+  const { activeSprintId, viewMode, setViewMode, setActiveSprintId } = useAppStore()
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [showTicketForm, setShowTicketForm] = useState(false)
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null)
   const [deleteTicket, setDeleteTicket] = useState<Ticket | null>(null)
   const [sortField, setSortField] = useState<'story_points' | 'status' | 'ticket_number'>('ticket_number')
+  const [showSprintSettings, setShowSprintSettings] = useState(false)
+  const [showDeleteSprint, setShowDeleteSprint] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
 
   const queryKey = ['sprint-detail', activeSprintId ?? ''] as string[]
 
@@ -60,6 +65,41 @@ export default function SprintPage() {
     enabled: !!activeSprintId,
   })
 
+  // For each ticket, find the earliest 'completed' audit entry so we can
+  // reconstruct the true historical burndown line.
+  const { data: ticketCompletions = [] } = useQuery<{ completedAt: string; points: number }[]>({
+    queryKey: ['burndown-completions', activeSprintId],
+    queryFn: async () => {
+      if (!activeSprintId || tickets.length === 0) return []
+      const ticketIds = tickets.map(t => t.id)
+      const pointsById = Object.fromEntries(tickets.map(t => [t.id, t.story_points]))
+
+      const { data } = await supabase
+        .from('audit_log')
+        .select('entity_id, created_at')
+        .eq('entity_type', 'ticket')
+        .eq('action', 'completed')
+        .in('entity_id', ticketIds)
+        .order('created_at', { ascending: true })
+
+      if (!data) return []
+
+      // Keep only the earliest completion per ticket
+      const earliest = new Map<string, string>()
+      for (const row of data) {
+        if (!earliest.has(row.entity_id)) {
+          earliest.set(row.entity_id, row.created_at)
+        }
+      }
+
+      return Array.from(earliest.entries()).map(([id, completedAt]) => ({
+        completedAt,
+        points: pointsById[id] ?? 0,
+      }))
+    },
+    enabled: !!activeSprintId && tickets.length > 0,
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async (ticketId: string) => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -79,6 +119,37 @@ export default function SprintPage() {
     onError: () => toast('Failed to delete ticket'),
   })
 
+  const renameMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase
+        .from('sprints')
+        .update({ name })
+        .eq('id', activeSprintId!)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sprint', activeSprintId] })
+      queryClient.invalidateQueries({ queryKey: ['sprints'] })
+      setShowSprintSettings(false)
+    },
+    onError: () => toast('Failed to rename sprint'),
+  })
+
+  const deleteSprintMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('sprints').delete().eq('id', activeSprintId!)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      setActiveSprintId(null)
+      queryClient.invalidateQueries({ queryKey: ['sprints'] })
+      setShowDeleteSprint(false)
+      setShowSprintSettings(false)
+      router.push('/dashboard')
+    },
+    onError: () => toast('Failed to delete sprint'),
+  })
+
   if (sprintLoading) return <SprintSkeleton />
 
   if (!activeSprintId || !sprint) {
@@ -91,7 +162,7 @@ export default function SprintPage() {
 
   const rawTickets = tickets as Ticket[]
   const feasibility = computeFeasibilityFull(rawTickets, sprint.start_date, sprint.end_date)
-  const burndownData = buildBurndownData(rawTickets, sprint.start_date, sprint.end_date)
+  const burndownData = buildBurndownData(rawTickets, sprint.start_date, sprint.end_date, ticketCompletions)
 
   const doneTickets = tickets.filter(t => t.status === 'done').length
   const totalPoints = rawTickets.reduce((acc, t) => acc + t.story_points, 0)
@@ -129,13 +200,22 @@ export default function SprintPage() {
             </span>
           </div>
         </div>
-        <button
-          onClick={() => setShowTicketForm(true)}
-          className="btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white shrink-0"
-        >
-          <Plus size={16} />
-          Add Ticket
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { setRenameValue(sprint.name); setShowSprintSettings(true) }}
+            className="rounded-xl p-2 dark:bg-white/6 bg-black/5 dark:text-slate-400 text-stone-500 dark:hover:bg-white/10 hover:bg-black/10 transition-colors border dark:border-white/8 border-black/8"
+            title="Sprint settings"
+          >
+            <Settings size={16} />
+          </button>
+          <button
+            onClick={() => setShowTicketForm(true)}
+            className="btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white"
+          >
+            <Plus size={16} />
+            Add Ticket
+          </button>
+        </div>
       </div>
 
       {/* View tabs */}
@@ -314,6 +394,84 @@ export default function SprintPage() {
         onCancel={() => setDeleteTicket(null)}
         loading={deleteMutation.isPending}
       />
+
+      <DeleteConfirmModal
+        open={showDeleteSprint}
+        title="Delete Sprint"
+        description={`Delete "${sprint.name}"? All tickets, tasks, contacts, and resources will be permanently removed.`}
+        onConfirm={() => deleteSprintMutation.mutate()}
+        onCancel={() => setShowDeleteSprint(false)}
+        loading={deleteSprintMutation.isPending}
+      />
+
+      {/* Sprint settings modal */}
+      {showSprintSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSprintSettings(false)} />
+          <div className={cn(
+            'relative w-full max-w-sm rounded-2xl p-6 animate-fade-in',
+            'dark:bg-[#1a1a1f] bg-white',
+            'border dark:border-white/8 border-black/8',
+            'shadow-[0_8px_48px_rgba(0,0,0,0.5)]'
+          )}>
+            <button
+              onClick={() => setShowSprintSettings(false)}
+              className="absolute right-4 top-4 rounded-lg p-1 dark:text-slate-400 text-stone-400 dark:hover:text-slate-200 hover:text-stone-700 transition-colors"
+            >
+              <X size={16} />
+            </button>
+            <h2 className="text-lg font-semibold dark:text-white text-stone-900 mb-5" style={{ fontFamily: 'var(--font-heading)' }}>
+              Sprint Settings
+            </h2>
+
+            {/* Rename */}
+            <div className="mb-5">
+              <label className="text-xs dark:text-slate-500 text-stone-400 mb-1.5 block">Sprint Name</label>
+              <input
+                type="text"
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && renameValue.trim()) renameMutation.mutate(renameValue.trim())
+                }}
+                className={cn(
+                  'w-full rounded-xl px-3 py-2 text-sm',
+                  'dark:bg-white/5 bg-black/4',
+                  'dark:text-slate-200 text-stone-800',
+                  'dark:border-white/10 border-black/10 border',
+                  'focus:outline-none focus:ring-2 focus:ring-cyan-500/30'
+                )}
+              />
+              <button
+                onClick={() => renameValue.trim() && renameMutation.mutate(renameValue.trim())}
+                disabled={renameMutation.isPending || !renameValue.trim() || renameValue.trim() === sprint.name}
+                className="mt-2 btn-primary rounded-xl px-4 py-2 text-sm font-medium text-white disabled:opacity-40 w-full"
+              >
+                {renameMutation.isPending ? 'Saving…' : 'Save Name'}
+              </button>
+            </div>
+
+            {/* Danger zone */}
+            <div className={cn(
+              'rounded-xl p-4 border',
+              'dark:bg-red-500/5 bg-red-50',
+              'dark:border-red-500/20 border-red-200'
+            )}>
+              <p className="text-xs font-medium text-red-400 mb-1">Danger Zone</p>
+              <p className="text-xs dark:text-slate-500 text-stone-500 mb-3">
+                Permanently deletes all tickets, tasks, and audit history for this sprint.
+              </p>
+              <button
+                onClick={() => setShowDeleteSprint(true)}
+                className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-red-400 dark:bg-red-500/10 bg-red-100 dark:hover:bg-red-500/20 hover:bg-red-200 transition-colors"
+              >
+                <Trash2 size={14} />
+                Delete Sprint
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
