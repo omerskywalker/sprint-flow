@@ -21,6 +21,7 @@ const NAV_TABS = [
   { label: 'Daily', href: '/dashboard' },
   { label: 'Weekly', href: '/dashboard/weekly' },
   { label: 'Sprint', href: '/dashboard/sprint' },
+  { label: 'Analytics', href: '/dashboard/analytics' },
 ]
 
 export function DashboardShell({ user, children }: DashboardShellProps) {
