@@ -39,6 +39,8 @@ export default function TicketDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [deleteContactId, setDeleteContactId] = useState<string | null>(null)
+  const [deleteResourceId, setDeleteResourceId] = useState<string | null>(null)
 
   // Contact & resource form state
   const [addingContact, setAddingContact] = useState(false)
@@ -404,7 +406,7 @@ export default function TicketDetailPage() {
                 )}
               </div>
               <button
-                onClick={() => deleteContactMutation.mutate(contact.id)}
+                onClick={() => setDeleteContactId(contact.id)}
                 className="p-1.5 rounded dark:text-slate-600 text-stone-300 dark:hover:text-red-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 size={13} />
@@ -513,7 +515,7 @@ export default function TicketDetailPage() {
                 )}
               </div>
               <button
-                onClick={() => deleteResourceMutation.mutate(resource.id)}
+                onClick={() => setDeleteResourceId(resource.id)}
                 className="p-1.5 rounded dark:text-slate-600 text-stone-300 dark:hover:text-red-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 size={13} />
@@ -652,6 +654,30 @@ export default function TicketDetailPage() {
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setShowDeleteModal(false)}
         loading={deleteMutation.isPending}
+      />
+
+      <DeleteConfirmModal
+        open={!!deleteContactId}
+        title="Delete Contact"
+        description="Remove this contact? This cannot be undone."
+        onConfirm={() => {
+          if (deleteContactId) deleteContactMutation.mutate(deleteContactId)
+          setDeleteContactId(null)
+        }}
+        onCancel={() => setDeleteContactId(null)}
+        loading={deleteContactMutation.isPending}
+      />
+
+      <DeleteConfirmModal
+        open={!!deleteResourceId}
+        title="Delete Resource"
+        description="Remove this resource? This cannot be undone."
+        onConfirm={() => {
+          if (deleteResourceId) deleteResourceMutation.mutate(deleteResourceId)
+          setDeleteResourceId(null)
+        }}
+        onCancel={() => setDeleteResourceId(null)}
+        loading={deleteResourceMutation.isPending}
       />
 
       <CompletionNoteModal

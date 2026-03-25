@@ -92,20 +92,28 @@ export function computeFeasibilityFull(
  * Build burndown chart data points.
  *
  * ideal: straight line from total_points down to 0 over sprint_days
- * actual: for past days, derive from audit log + current statuses
- *         for future days (including today), use null
+ * actual: reconstructed from audit_log completion timestamps for past days,
+ *         null for future days
+ *
+ * completions: array of { completedAt: ISO string, points: number } — one
+ *   entry per completed ticket, using the earliest audit_log 'completed' action.
+ *   If a ticket is currently done but has no audit record, it is still counted
+ *   as burned (attributed to today).
  */
 export function buildBurndownData(
   tickets: Ticket[],
   sprintStartDate: string,
   sprintEndDate: string,
+  completions: { completedAt: string; points: number }[] = [],
   today: Date = new Date()
 ): BurndownPoint[] {
   const startDate = new Date(sprintStartDate + 'T00:00:00')
   const endDate = new Date(sprintEndDate + 'T23:59:59')
   const totalDays = countWorkingDays(startDate, endDate)
-
   const totalPoints = tickets.reduce((acc, t) => acc + t.story_points, 0)
+
+  const todayNorm = new Date(today)
+  todayNorm.setHours(23, 59, 59, 999)
 
   const points: BurndownPoint[] = []
 
@@ -113,23 +121,21 @@ export function buildBurndownData(
     const ideal = totalPoints - (totalPoints / totalDays) * day
 
     let actual: number | null = null
+
     if (day === 0) {
       actual = totalPoints
     } else {
-      // Day N corresponds to the Nth working day from start
       const dayDate = nthWorkingDay(startDate, day)
-      const todayNorm = new Date(today)
-      todayNorm.setHours(0, 0, 0, 0)
+      // End of this sprint day
+      const dayEnd = new Date(dayDate)
+      dayEnd.setHours(23, 59, 59, 999)
 
-      if (dayDate <= todayNorm) {
-        // For past/today: use current remaining (simplified — for exact historical
-        // accuracy you'd query the audit log, but we use current state as best estimate)
-        const remaining = tickets
-          .filter(t => t.status !== 'done')
-          .reduce((acc, t) => acc + t.story_points, 0)
-        // Linearly interpolate for days before today using done tickets
-        // This is a simplified version; a full implementation would use audit_log timestamps
-        actual = remaining
+      if (dayEnd <= todayNorm) {
+        // Sum points burned on or before the end of this sprint day
+        const burned = completions
+          .filter(c => new Date(c.completedAt) <= dayEnd)
+          .reduce((acc, c) => acc + c.points, 0)
+        actual = Math.max(0, totalPoints - burned)
       }
     }
 
@@ -137,7 +143,7 @@ export function buildBurndownData(
       day,
       label: day === 0 ? 'Start' : `Day ${day}`,
       ideal: Math.max(0, Math.round(ideal * 10) / 10),
-      actual,
+      actual: actual !== null ? Math.round(actual * 10) / 10 : null,
     })
   }
 
